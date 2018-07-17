@@ -37,4 +37,4 @@ rsconnect/
 .Rproj.user
 
 # Files That I work one.
-.csv
+*.csv
