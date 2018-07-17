@@ -4,6 +4,7 @@ test  = fread("test.csv")
 sample = fread("sample_submission.csv")
 
 library("xgboost")
+
 # Exclude Variables which Test & Train distribute differently.
 summary =
 	data.table(colname    = colnames(train[, 3:ncol(train)]),
@@ -20,3 +21,5 @@ selected_cols = summary[t_value >= t_neg & t_value <= t_pos]$colname
 train = train[, selected_cols, with = FALSE]
 test  = test[, selected_cols, with = FALSE]
 rm(summary, selected_cols)
+
+# Next step should be to use PCA to combine variables into new variables.
