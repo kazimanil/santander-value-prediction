@@ -19,3 +19,4 @@ summary[, t_neg := -qt(p = 0.99, df = nrow(test) + nrow(train) - 2)]
 selected_cols = summary[t_value >= t_neg & t_value <= t_pos]$colname
 train = train[, selected_cols, with = FALSE]
 test  = test[, selected_cols, with = FALSE]
+rm(summary, selected_cols)
