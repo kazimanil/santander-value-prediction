@@ -65,15 +65,35 @@ colnames   = paste0("factor", colnames)
 new_dt     = as.data.table(new_dt)
 new_dt     = `colnames<-`(new_dt, colnames)
 
+# It's sanity check time.
+sanity_check = data.table(factor = colnames,
+                          sd     = sapply(new_dt, sd, simplify = TRUE, USE.NAMES = TRUE),
+                          mean   = sapply(new_dt, mean, simplify = TRUE, USE.NAMES = TRUE))
+
+sanity_check = sanity_check[sd == 0 & mean == 0]
+cols_to_keep = colnames[!colnames %in% sanity_check$factor]
+
+new_dt = new_dt[, cols_to_keep, with = FALSE]
+
 rm(dt_cor, dt_eig, dt_eiv, pca_results, pca_weights); gc()
 new_train  = cbind(train[, 1:2], 
-                   new_dt[1:nrow(train), 1:n_facs])
+                   new_dt[1:nrow(train), 1:length(cols_to_keep)])
 test_start = nrow(train)+1
 test_end   = nrow(test)+nrow(train)
 new_test   = cbind(test[, 1], 
-                   new_dt[test_start:test_end, 1:n_facs])
-rm(test_start, test_end, n_cols, n_facs, colnames, dt_pca, test, train, new_dt)
+                   new_dt[test_start:test_end, 1:length(cols_to_keep)])
+
+rm(test_start, test_end, n_cols, n_facs, colnames, dt_pca, test, train, new_dt, sanity_check, cols_to_keep)
 save(new_test, new_train, file = "PCA.RData")
+
+# Let's check the distribution of target first
+ggplot(data = new_train, aes(x = target)) + 
+  geom_histogram() +
+  theme_dt()
+
+#Parameter Tuning for xGBoost
+ptx = xgb.cv(data = new_train[, 2:nrow(new_train)],
+             label = target)
 
 #xGBoost -- The model parameters are obtained with bayesian optimization package (https://www.kaggle.com/kailex/santander-eda-features)
 p <- list(objective = "reg:linear",
