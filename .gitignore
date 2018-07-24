@@ -39,3 +39,4 @@ rsconnect/
 
 # Files That I work one.
 *.csv
+*.RData
