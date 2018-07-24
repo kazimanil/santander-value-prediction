@@ -8,6 +8,7 @@ library("stats")      # Factor Analysis
 #library("psych")     # Factor Analysis -- stats::princomp has a better interface.
 library("xgboost")    # Gradient Boosting
 library("MlBayesOpt") # Optimisation for Gradient Boosting.
+source("C:/Users/kazimanil/Documents/Digitallency_GGPlot_Theme.R")
 
 # Data Manipulation ----
 # Since there are lots of variables I will have to make a selection. Thereby, I will first decide if variables distribute differently in test and train sets assuming they distribute normally. I will use student's t-distribution and %99 confidence interval for this test. Then I will filter out variables which fail the test.
@@ -88,12 +89,26 @@ save(new_test, new_train, file = "PCA.RData")
 
 # Let's check the distribution of target first
 ggplot(data = new_train, aes(x = target)) + 
-  geom_histogram() +
-  theme_dt()
+  geom_histogram(col = "Darkorange", fill = "Turquoise")  +
+  theme_dt() + labs(x = "Target", y = "Frequency")
+
+# We have a very skewed target. We shall normalise it before putting it into xGBoost.
+box = boxcox(new_train$target ~ 1, 
+             lambda = seq(-1, 1, 0.01))
+cox = data.table(lambda = box$x, 
+                 logLL  = box$y)[order(-logLL)]
+lambda = cox[1]$lambda
+new_train[, target_boxcox := (target ^ lambda - 1) / lambda]
+
+ggplot(data = new_train, aes(x = target_boxcox)) + 
+  geom_histogram(aes(y = ..density..), col = "Darkorange", fill = "Turquoise", bins = 30) + 
+  geom_density(col = "red", size = 1) +
+  theme_dt() +
+  labs(x = "Target (Box-Cox Transformation)", y = "Frequency")
 
 #Parameter Tuning for xGBoost
 ptx = xgb.cv(data = new_train[, 2:nrow(new_train)],
-             label = target)
+             label = target_boxcox)
 
 #xGBoost -- The model parameters are obtained with bayesian optimization package (https://www.kaggle.com/kailex/santander-eda-features)
 p <- list(objective = "reg:linear",
