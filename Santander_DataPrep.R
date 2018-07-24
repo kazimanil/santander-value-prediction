@@ -92,13 +92,14 @@ ggplot(data = new_train, aes(x = target)) +
   geom_histogram(col = "Darkorange", fill = "Turquoise")  +
   theme_dt() + labs(x = "Target", y = "Frequency")
 
-# We have a very skewed target. We shall normalise it before putting it into xGBoost.
+# We have a very skewed target. We shall normalise it before putting it into xGBoost. (ref: http://rcompanion.org/handbook/I_12.html)
 box = boxcox(new_train$target ~ 1, 
              lambda = seq(-1, 1, 0.01))
 cox = data.table(lambda = box$x, 
                  logLL  = box$y)[order(-logLL)]
 lambda = cox[1]$lambda
-new_train[, target_boxcox := (target ^ lambda - 1) / lambda]
+new_train[, target_boxcox := (target ^ lambda - 1) / lambda]; rm(box, cox, lambda);
+shapiro.test(new_train$target_boxcox) # ref: http://www.sthda.com/english/wiki/normality-test-in-r
 
 ggplot(data = new_train, aes(x = target_boxcox)) + 
   geom_histogram(aes(y = ..density..), col = "Darkorange", fill = "Turquoise", bins = 30) + 
@@ -107,8 +108,12 @@ ggplot(data = new_train, aes(x = target_boxcox)) +
   labs(x = "Target (Box-Cox Transformation)", y = "Frequency")
 
 #Parameter Tuning for xGBoost
-ptx = xgb.cv(data = new_train[, 2:nrow(new_train)],
-             label = target_boxcox)
+ptx = xgb_cv_opt(data = new_train[, 2:ncol(new_train)],
+                 label = target_boxcox,
+                 object = "reg:linear",
+                 evalmetric = "rmse",
+                 n_folds = 10,
+                 n_iter  = 10)
 
 #xGBoost -- The model parameters are obtained with bayesian optimization package (https://www.kaggle.com/kailex/santander-eda-features)
 p <- list(objective = "reg:linear",
