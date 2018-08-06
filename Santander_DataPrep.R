@@ -5,9 +5,10 @@ sample = fread("sample_submission.csv")
 
 # Libraries ----
 library("stats")      # Factor Analysis
-#library("psych")     # Factor Analysis -- stats::princomp has a better interface.
+library("psych")      # Factor Analysis -- stats::princomp has a better interface.
 library("xgboost")    # Gradient Boosting
 library("MlBayesOpt") # Optimisation for Gradient Boosting.
+library("Matrix")     # To Prepare the data for XGBoost model
 source("C:/Users/kazimanil/Documents/Digitallency_GGPlot_Theme.R")
 
 # Data Manipulation ----
@@ -98,7 +99,7 @@ box = boxcox(new_train$target ~ 1,
 cox = data.table(lambda = box$x, 
                  logLL  = box$y)[order(-logLL)]
 lambda = cox[1]$lambda
-new_train[, target_boxcox := (target ^ lambda - 1) / lambda]; rm(box, cox, lambda);
+new_train[, target_boxcox := (target ^ lambda - 1) / lambda]; rm(box, cox);
 shapiro.test(new_train$target_boxcox) # ref: http://www.sthda.com/english/wiki/normality-test-in-r
 
 ggplot(data = new_train, aes(x = target_boxcox)) + 
@@ -108,13 +109,22 @@ ggplot(data = new_train, aes(x = target_boxcox)) +
   labs(x = "Target (Box-Cox Transformation)", y = "Frequency")
 
 #Parameter Tuning for xGBoost
-ptx = xgb_cv_opt(data = new_train[, 2:ncol(new_train)],
-                 label = target_boxcox,
+my_nfolds  = as.integer(13);
+xgb_matrix = as.matrix(new_train[, 3:ncol(new_train)]);
+xgb_matrix = xgb.DMatrix(xgb_matrix, label = xgb_matrix[, 823]);
+new_test$target_boxcox = 0
+xgb_tester = as.matrix(new_test[, 2:ncol(new_test)])
+xgb_tester = xgb.DMatrix(data = xgb_tester, label = xgb_tester[, 823]);
+
+ptx = xgb_cv_opt(data = xgb_matrix, 
                  object = "reg:linear",
                  evalmetric = "rmse",
-                 n_folds = 10,
-                 n_iter  = 10)
-
+                 subsample_range = c(0.7, 0.9),
+                 eta_range = c(0.1, 0.5),
+                 n_folds = 13,
+                 n_iter  = 20,
+                 seed = 23)
+ 
 #xGBoost -- The model parameters are obtained with bayesian optimization package (https://www.kaggle.com/kailex/santander-eda-features)
 p <- list(objective = "reg:linear",
           booster = "gbtree",
@@ -128,7 +138,15 @@ p <- list(objective = "reg:linear",
           colsample_bytree = 0.1,
           colsample_bylevel = 0.1,
           alpha = 0,
-          lambda = 100,
-          nrounds = 10000)
+          lambda = 100)
 
-m_xgb <- xgb.train(p, dtrain, p$nrounds, list(val = dval), print_every_n = 100, early_stopping_rounds = 300)
+m_xgb <- xgboost(params = p, 
+                 data = xgb_matrix, 
+                 nrounds = 10000, 
+                 print_every_n = 100, 
+                 early_stopping_rounds = 300)
+
+new_test$target_boxcox = predict(object = m_xgb, newdata = xgb_tester)
+new_test[, target := (target_boxcox * lambda + 1) ^ ( 1 / lambda)]
+submission_xgb1 = new_test[, c(1,825)]
+fwrite(submission_xgb1, file = "submission_xgb1.csv")
