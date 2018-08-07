@@ -125,5 +125,5 @@ test_end   = nrow(test)+nrow(train)
 new_test   = cbind(test[, 1], 
                    new_dt[test_start:test_end, 1:length(colnames)])
 
-rm(test_start, test_end, n_cols, n_facs, colnames, dt_pca, test, train, new_dt, sanity_check)
+rm(test_start, test_end, colnames, dt_pca, test, train, new_dt)
 save(new_test, new_train, file = "PCA_v3B.RData")
