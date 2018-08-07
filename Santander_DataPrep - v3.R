@@ -3,7 +3,7 @@
 rm(list = ls()); gc()
 train = fread("train.csv")
 test  = fread("test.csv")
-sample = fread("sample_submission.csv")
+# sample = fread("sample_submission.csv")
 
 # Libraries ----
 library("Hmisc") # For Correlation Matrix
@@ -28,7 +28,8 @@ rm(sanity_check, colstokeep)
 
 # I will normalise the target variable
 box = boxcox(train$target ~ 1, 
-             lambda = seq(-1, 1, 0.01))
+             lambda = seq(-1, 1, 0.01), 
+             plotit = FALSE)
 cox = data.table(lambda = box$x, 
                  logLL  = box$y)[order(-logLL)]
 lambda = cox[1]$lambda
@@ -49,7 +50,9 @@ colstokeep = append("ID", append("target", append("target_boxcox", sig.vars)))
 train = train[, colstokeep, with = FALSE]
 colstokeep = append("ID", sig.vars)
 test  = test[, colstokeep, with = FALSE]
-rm(colstokeep, cor_mtx, cor_dta)
+rm(colstokeep, cor_mtx, cor_dta, cor_chk, sig.vars)
+saveRDS(test, file = "test_sigvars.RDS")
+saveRDS(train, file = "train_sigvars.RDS")
 
 # Principal Components Analysis ----
 # Now selected variables will be put into PCA.
@@ -58,15 +61,16 @@ n_cols = ncol(dt_pca)  # Number of columns
 dt_cor = cor(dt_pca)   # Correlation Matrix
 dt_eig = eigen(dt_cor) # EigenValues & EigenVectors
 dt_eiv = dt_eig$values # EigenValues
-n_facs = length(dt_eiv[dt_eiv > 1]) # Amount of Factors to be derived based on "EigenValue > 1" criterion. Let's depict this with a graph as well.
-sp_fac = 5
+n_facs = length(dt_eiv[dt_eiv > 1]) # Amount of Factors to be derived based on "EigenValue > 1" criterion.
+sp_fac = 4 # Amount of Factors to be derived based on "ScreePlot" criterion.
 
-plot(dt_eiv[1:50],
-     main="Scree Plot",
-     ylab="Eigenvalues",
-     xlab="Component number",
-     type='b')
-abline(h=1, lty=2)
+# Checked for Scree Plot Criterion
+# plot(dt_eiv[1:50],
+#     main="Scree Plot",
+#     ylab="Eigenvalues",
+#     xlab="Component number",
+#     type='b')
+# abline(h=1, lty=2)
 
 # PCA for RF & xGBoost ----
 pca_results = psych::principal(r = dt_cor, nfactors = n_facs, rotate = "varimax", scores = TRUE, n.obs = nrow(dt_pca))
@@ -89,19 +93,19 @@ sanity_check = data.table(factor = colnames,
 
 sanity_check = sanity_check[sd == 0 & mean == 0]
 cols_to_keep = colnames[!colnames %in% sanity_check$factor]
-
 new_dt = new_dt[, cols_to_keep, with = FALSE]
 
-rm(pca_results, pca_weights); gc()
+rm(pca_results, pca_weights, cols_to_keep); gc()
 new_train  = cbind(train[, 1:3], 
-                   new_dt[1:nrow(train), 1:length(cols_to_keep)])
+                   new_dt[1:nrow(train)])
 test_start = nrow(train)+1
 test_end   = nrow(test)+nrow(train)
 new_test   = cbind(test[, 1], 
-                   new_dt[test_start:test_end, 1:length(cols_to_keep)])
+                   new_dt[test_start:test_end])
 
 rm(test_start, test_end, n_cols, n_facs, colnames, new_dt, sanity_check, cols_to_keep)
-save(new_test, new_train, file = "PCA_v3A.RData")
+saveRDS(new_test, file = "test_PCAv3_xgb.RDS")
+saveRDS(new_train, file = "train_PCAv3_xgb.RDS")
 
 # PCA for Linear Regression ----
 pca_results = psych::principal(r = dt_cor, nfactors = sp_fac, rotate = "varimax", scores = TRUE, n.obs = nrow(dt_pca))
@@ -119,11 +123,12 @@ new_dt     = `colnames<-`(new_dt, colnames)
 
 rm(dt_cor, dt_eig, dt_eiv, pca_results, pca_weights); gc()
 new_train  = cbind(train[, 1:3], 
-                   new_dt[1:nrow(train), 1:length(colnames)])
+                   new_dt[1:nrow(train)])
 test_start = nrow(train)+1
 test_end   = nrow(test)+nrow(train)
 new_test   = cbind(test[, 1], 
-                   new_dt[test_start:test_end, 1:length(colnames)])
+                   new_dt[test_start:test_end,])
 
-rm(test_start, test_end, colnames, dt_pca, test, train, new_dt)
-save(new_test, new_train, file = "PCA_v3B.RData")
+rm(test_start, test_end, colnames, dt_pca, test, train, new_dt, sp_fac)
+saveRDS(new_test, file = "test_PCAv3_linreg.RDS")
+saveRDS(new_train, file = "train_PCAv3_linreg.RDS")
